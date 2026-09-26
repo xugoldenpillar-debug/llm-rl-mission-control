@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {LocalStore} from '../js/storage.js';
+import {initialState} from '../js/core.js';
+test('memory fallback serializes concurrent updates without lost fields',async()=>{const store=new LocalStore();await Promise.all(Array.from({length:40},(_,i)=>store.mutate(s=>{s.journals[i]={notes:'note-'+i};})));assert.equal(Object.keys(store.state.journals).length,40);assert.equal(store.state.revision,40);});
+test('a rejected write does not corrupt state or poison later writes',async()=>{const store=new LocalStore();await assert.rejects(()=>store.mutate(s=>{s.settings.budget=-1;}));assert.equal(store.state.settings.budget,3500);await store.mutate(s=>{s.settings.name='Recovered';});assert.equal(store.state.settings.name,'Recovered');});
+test('validated backup can recover corrupt root keys and revision',async()=>{const store=new LocalStore();store.state={revision:'corrupt',unknown:'bad',schemaVersion:999};const good=initialState();good.settings.name='Recovered';await store.replace(good);assert.equal(store.state.settings.name,'Recovered');assert.equal(store.state.schemaVersion,1);assert.equal(store.state.revision,1);assert.equal('unknown' in store.state,false);});
+test('restoring a backup cancels its timer and preserves local revision ordering',async()=>{const store=new LocalStore();await store.mutate(s=>{s.settings.name='Before';});const good=initialState();good.revision=999;good.timer={id:'old',mode:'focus',status:'running',date:'2026-09-27',durationMs:60000,remainingMs:60000,startedAt:Date.now()};await store.replace(good);assert.equal(store.state.timer,null);assert.equal(store.state.revision,2);});

@@ -26,6 +26,7 @@ jobs:
         run: |
           node scripts/dev.mjs > /tmp/rlmc-server.log 2>&1 &
           python tests/browser_smoke.py --url http://127.0.0.1:8787 --output artifacts
+          python tests/browser_integrity.py --url http://127.0.0.1:8787 --output artifacts
       - uses: actions/upload-artifact@v4
         if: success()
         with:

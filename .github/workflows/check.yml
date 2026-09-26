@@ -1,0 +1,30 @@
+name: Test and build
+on:
+  push:
+    branches: [main, qa/validation]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: static-site
+          path: dist
+      - name: Package reproducible source snapshot
+        if: always()
+        run: git archive --format=zip HEAD -o source.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-snapshot
+          path: source.zip

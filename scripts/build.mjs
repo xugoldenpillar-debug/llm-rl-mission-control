@@ -1,0 +1,12 @@
+import {mkdir,rm,cp,writeFile,readFile} from 'node:fs/promises';
+import {resolve,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {tasks,days,resources} from '../js/plan.js';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),dist=resolve(root,'dist');
+if(tasks.length!==180||days.length!==30||tasks.reduce((a,t)=>a+t.minutes,0)!==18000)throw Error('Invalid curriculum totals');
+await rm(dist,{recursive:true,force:true});await mkdir(dist,{recursive:true});
+for(const file of ['index.html','styles.css','icon.svg','manifest.webmanifest','sw.js','js'])await cp(resolve(root,file),resolve(dist,file),{recursive:true});
+await writeFile(resolve(dist,'.nojekyll'),'');
+const pkg=JSON.parse(await readFile(resolve(root,'package.json'),'utf8'));
+await writeFile(resolve(dist,'build-info.json'),JSON.stringify({version:pkg.version,curriculumDays:days.length,tasks:tasks.length,minutes:18000,resources:resources.length},null,2));
+console.log(`Built dist/: ${days.length} days, ${tasks.length} tasks, 300 hours, ${resources.length} resources. No runtime dependencies.`);

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.rlmc
+rlmc-backup*.json
+rlmc-raw-recovery*.json
+playwright-report/
+test-results/
+artifacts/

@@ -1,0 +1,58 @@
+name: Deploy GitHub Pages
+# First select Settings > Pages > Source > GitHub Actions, then Run workflow.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.detect.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
+      - name: Check Pages configuration
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" --jq '.build_type' > /tmp/pages-type 2>/tmp/pages-error; then
+            if grep -q 'workflow' /tmp/pages-type; then
+              echo 'enabled=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'enabled=false' >> "$GITHUB_OUTPUT"
+              echo '::notice::Pages is using branch publishing. This project also works directly from main / (root).'
+            fi
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Enable Settings > Pages > Source > GitHub Actions, then run this workflow again. No token needs to be put in the app.'
+          fi
+      - uses: actions/configure-pages@v5
+        if: steps.detect.outputs.enabled == 'true'
+      - uses: actions/upload-pages-artifact@v4
+        if: steps.detect.outputs.enabled == 'true'
+        with:
+          path: dist
+  deploy:
+    if: needs.build.outputs.enabled == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,10 +1,21 @@
-"""Additional destructive tests, always in isolated browser storage."""
+"""Destructive integrity tests run only in isolated browser storage.
+Polling uses direct browser evaluation, not eval-based waitForFunction, so the
+application can keep its strict script-src CSP without unsafe-eval.
+"""
 from __future__ import annotations
 import argparse
 import json
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
+
+
+def wait_for_writes(page) -> None:
+    for _ in range(300):
+        if page.evaluate('() => window.writeDone === true'):
+            return
+        page.wait_for_timeout(50)
+    raise AssertionError('Concurrent writes did not finish within 15 seconds')
 
 
 def main() -> None:
@@ -36,8 +47,8 @@ def main() -> None:
         }"""
         page.evaluate(start_writes, 'A-')
         other.evaluate(start_writes, 'B-')
-        page.wait_for_function('window.writeDone')
-        other.wait_for_function('window.writeDone')
+        wait_for_writes(page)
+        wait_for_writes(other)
         assert page.evaluate('window.writeError') is None
         assert other.evaluate('window.writeError') is None
         result = page.evaluate("""async()=>{const {LocalStore}=await import('./js/storage.js');
@@ -81,7 +92,6 @@ def main() -> None:
         checks.append('corrupted root is not silently reset; valid backup restores it without retaining unknown keys')
         ctx.close()
 
-        # Full mobile navigation has to fit, including longer course/task content.
         mobile_ctx = browser.new_context(viewport={'width': 390, 'height': 844})
         mobile = mobile_ctx.new_page()
         mobile.goto(base, wait_until='networkidle')
@@ -89,14 +99,15 @@ def main() -> None:
             mobile.locator('[data-action="menu"]').click()
             mobile.locator(f'a.nav-link[href="#{view}"]').click()
             expect(mobile.locator('#main h1')).to_be_visible()
-            assert mobile.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), view
+            if not mobile.evaluate('document.documentElement.scrollWidth <= innerWidth+1'):
+                mobile.screenshot(path=str(out / ('overflow-' + view + '.png')), full_page=True)
+                raise AssertionError('Mobile overflow: ' + view)
         mobile.screenshot(path=str(out / 'mobile-clean.png'), full_page=True)
         mobile.set_viewport_size({'width': 320, 'height': 740})
         assert mobile.evaluate('document.documentElement.scrollWidth <= innerWidth+1')
         checks.append('all eleven views fit 390px; fresh dashboard also fits 320px')
         mobile_ctx.close()
 
-        # Do not pretend storage is durable when the browser blocks both mechanisms.
         fallback_ctx = browser.new_context()
         fallback_ctx.add_init_script("""Object.defineProperty(window,'indexedDB',{get(){throw new Error('blocked in test')}});
           Object.defineProperty(window,'localStorage',{get(){throw new Error('blocked in test')}});""")
